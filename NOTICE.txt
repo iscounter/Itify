@@ -1,0 +1,13 @@
+OpenReach Tube - clean-room rebuild starter.
+
+Original code by the OpenReach Tube contributors. Licensed GPL-3.0-or-later
+(see LICENSE). Depends on open-source libraries under their own licenses:
+Apache-2.0 (Media3, Ktor, OkHttp, Coil, Gson, Hilt, Room, WorkManager),
+MPL-2.0 (Rhino), MIT (Jsoup), and NewPipeExtractor (GPL v3 family), which
+governs the licensing of the combined work.
+
+SponsorBlock data (sponsor.ajay.app) is community-contributed under the
+SponsorBlock project terms (AGPL-3.0) - attribute it in your About screen.
+
+"OpenReach Tube" is a placeholder name. Ensure your final name/branding does
+not infringe third-party trademarks (including YouTube and ZyvoTube).

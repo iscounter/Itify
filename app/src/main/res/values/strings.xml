@@ -1,0 +1,15 @@
+<resources>
+    <string name="app_name">OpenReach Tube</string>
+    <string name="tab_home">Home</string>
+    <string name="tab_shorts">Shorts</string>
+    <string name="tab_subscriptions">Subscriptions</string>
+    <string name="tab_library">You</string>
+    <string name="tab_notifications">Notifications</string>
+    <string name="search_placeholder">Search OpenReach Tube</string>
+    <string name="background_play">Background Play</string>
+    <string name="download">Download</string>
+    <string name="no_internet">No Internet Connection</string>
+    <string name="third_party_notice">This app streams and downloads content from third-party platforms. You are responsible for complying with each platform\'s terms in your jurisdiction.</string>
+    <string name="notification_channel_playback">Now playing</string>
+    <string name="notification_channel_downloads">Downloads</string>
+</resources>
