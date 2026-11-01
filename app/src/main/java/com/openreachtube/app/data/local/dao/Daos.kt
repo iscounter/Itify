@@ -48,7 +48,7 @@ interface SearchHistoryDao {
     suspend fun recent(limit: Int): List<String>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insert(query: String)
+    suspend fun insert(entity: SearchHistoryEntity)
 }
 
 @Dao

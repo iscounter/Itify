@@ -2,7 +2,7 @@ package com.openreachtube.app.ui.screens.subscriptions
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.openreachtube.app.data.local.SubscriptionDao
+import com.openreachtube.app.data.local.dao.SubscriptionDao
 import com.openreachtube.app.data.repository.VideoRepository
 import com.openreachtube.app.domain.model.VideoItem
 import dagger.hilt.android.lifecycle.HiltViewModel

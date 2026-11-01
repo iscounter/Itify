@@ -2,7 +2,8 @@ package com.openreachtube.app.ui.screens.search
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.openreachtube.app.data.local.SearchHistoryDao
+import com.openreachtube.app.data.local.dao.SearchHistoryDao
+import com.openreachtube.app.data.local.entity.SearchHistoryEntity
 import com.openreachtube.app.data.repository.SearchRepository
 import com.openreachtube.app.domain.model.SearchTab
 import com.openreachtube.app.domain.model.VideoItem
@@ -60,7 +61,7 @@ class SearchViewModel @Inject constructor(
         runCatching { searchRepository.search(query, _state.value.tab) }
             .onSuccess { results ->
                 _state.value = _state.value.copy(loading = false, results = results)
-                searchHistoryDao.insert(query)
+                searchHistoryDao.insert(SearchHistoryEntity(query = query))
             }
             .onFailure { _state.value = _state.value.copy(loading = false) }
     }

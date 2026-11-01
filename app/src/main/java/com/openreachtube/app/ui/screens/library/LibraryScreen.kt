@@ -17,7 +17,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 fun LibraryScreen(onOpenVideo: (String) -> Unit, viewModel: LibraryViewModel = hiltViewModel()) {
     val state by viewModel.state.collectAsState()
     LazyColumn(Modifier.fillMaxSize()) {
-        item { Text("You", style = MaterialTheme.typography.titleLarge, Modifier.padding(16.dp)) }
+        item { Text("You", Modifier.padding(16.dp), style = MaterialTheme.typography.titleLarge) }
         item { Text("Liked Videos (${state.liked.size})", Modifier.padding(horizontal = 16.dp)) }
         items(state.liked.size) { i ->
             Text(state.liked[i].title, Modifier.padding(horizontal = 16.dp, vertical = 4.dp))

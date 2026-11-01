@@ -91,7 +91,8 @@ class ChunkedDownloader @Inject constructor(
                 val out = java.io.RandomAccessFile(target, "rw")
                 out.use { raf ->
                     raf.seek(chunk.startByte + chunk.downloadedBytes)
-                    val src = resp.body.byteStream()
+                    val src = resp.body?.byteStream()
+                        ?: throw java.io.IOException("Empty response body for chunk ${chunk.chunkIndex}")
                     val buffer = ByteArray(64 * 1024)
                     var read: Int
                     while (src.read(buffer).also { read = it } != -1) {

@@ -2,9 +2,9 @@ package com.openreachtube.app.ui.screens.library
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.openreachtube.app.data.local.FavoriteDao
-import com.openreachtube.app.data.local.HistoryDao
-import com.openreachtube.app.data.local.LocalPlaylistDao
+import com.openreachtube.app.data.local.dao.FavoriteDao
+import com.openreachtube.app.data.local.dao.HistoryDao
+import com.openreachtube.app.data.local.dao.LocalPlaylistDao
 import com.openreachtube.app.domain.model.VideoItem
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
