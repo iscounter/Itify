@@ -49,8 +49,9 @@ private class OkHttpDownloader(private val client: OkHttpClient) : Downloader() 
         val resp = client.newCall(builder.build()).execute()
         resp.use {
             val bytes = it.body?.bytes() ?: ByteArray(0)
+            val headers: Map<String, List<String>> = it.headers.toMultimap()
             if (it.code == 429) throw ReCaptchaException("rate limited", request.url())
-            return Response(it.code, it.message, it.headers.toMultimap(), String(bytes), request.url())
+            return Response(it.code, it.message, headers, String(bytes), request.url())
         }
     }
 }

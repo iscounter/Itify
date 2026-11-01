@@ -15,6 +15,7 @@ data class HistoryEntity(
 ) {
     fun toDomain() = com.openreachtube.app.domain.model.VideoItem(
         id = videoId, title = title, uploader = uploader, thumbnailUrl = thumbnailUrl,
+        durationSeconds = durationSeconds, progressSeconds = positionSeconds,
     )
 }
 

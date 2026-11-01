@@ -3,6 +3,7 @@ package com.openreachtube.app.ui.screens.subscriptions
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.openreachtube.app.data.local.dao.SubscriptionDao
+import com.openreachtube.app.data.local.entity.SubscriptionEntity
 import com.openreachtube.app.data.repository.VideoRepository
 import com.openreachtube.app.domain.model.VideoItem
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -13,11 +14,13 @@ import kotlinx.coroutines.launch
 
 data class SubscriptionsUiState(
     val loading: Boolean = true,
+    val channels: List<SubscriptionEntity> = emptyList(),
     val items: List<VideoItem> = emptyList(),
     val empty: Boolean = false,
+    val error: String? = null,
 )
 
-/** Subscriptions feed backed by local SubscriptionDao + FeedCache for offline. */
+/** Subscriptions feed backed by local SubscriptionDao + per-channel uploads. */
 @HiltViewModel
 class SubscriptionsFeedViewModel @Inject constructor(
     private val videoRepository: VideoRepository,
@@ -31,14 +34,29 @@ class SubscriptionsFeedViewModel @Inject constructor(
 
     fun refresh() {
         viewModelScope.launch {
-            val subs = subscriptionDao.all()
+            val subs = runCatching { subscriptionDao.all() }.getOrDefault(emptyList())
             if (subs.isEmpty()) {
                 _state.value = SubscriptionsUiState(loading = false, empty = true)
                 return@launch
             }
+            _state.value = SubscriptionsUiState(loading = true, channels = subs)
             runCatching { videoRepository.subscriptionsFeed(subs.map { it.channelUrl }) }
-                .onSuccess { _state.value = SubscriptionsUiState(false, it, false) }
-                .onFailure { _state.value = SubscriptionsUiState(false, emptyList(), subs.isEmpty()) }
+                .onSuccess {
+                    _state.value = SubscriptionsUiState(
+                        loading = false,
+                        channels = subs,
+                        items = it,
+                        empty = false,
+                    )
+                }
+                .onFailure {
+                    _state.value = SubscriptionsUiState(
+                        loading = false,
+                        channels = subs,
+                        empty = false,
+                        error = it.message,
+                    )
+                }
         }
     }
 }

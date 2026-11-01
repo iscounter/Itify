@@ -15,8 +15,20 @@ android {
         applicationId = "com.openreachtube.app"
         minSdk = 24
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.2.0"
+    }
+
+    signingConfigs {
+        create("release") {
+            // Personal release keystore; replace with your own before publishing.
+            // The keystore is generated outside the repo (work/env/release.keystore);
+            // CI builds the debug APK and does not need it.
+            storeFile = file(System.getenv("ORTUBE_KEYSTORE") ?: "/home/z/my-project/work/env/release.keystore")
+            storePassword = "openreach2026"
+            keyAlias = "openreach"
+            keyPassword = "openreach2026"
+        }
     }
 
     buildTypes {
@@ -24,16 +36,21 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            // TODO(release): configure a real release signing config (see docs/REMAINING_WORK.md)
+            signingConfig = signingConfigs.getByName("release")
         }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions { jvmTarget = "17" }
     buildFeatures { compose = true }
     packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}" }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+    }
 }
 
 dependencies {

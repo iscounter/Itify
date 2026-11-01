@@ -11,6 +11,8 @@ data class VideoItem(
     val viewCount: Long = -1,
     val uploadDate: String? = null,
     val isShort: Boolean = false,
+    /** Seconds already watched (continue-playing progress bar). */
+    val progressSeconds: Long = 0,
 )
 
 data class ChannelInfo(
@@ -39,7 +41,13 @@ data class StreamBundle(
     val videoId: String,
     val title: String,
     val uploader: String,
+    val uploaderUrl: String? = null,
+    val thumbnailUrl: String? = null,
+    val durationSeconds: Long = 0,
+    val viewCount: Long = -1,
+    val uploadDate: String? = null,
     val streams: List<StreamOption>,
+    val hlsUrl: String? = null,
     val subtitles: List<SubtitleItem>,
     val related: List<VideoItem> = emptyList(),
 )
