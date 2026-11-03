@@ -1,7 +1,11 @@
 package com.openreachtube.app.ui.screens.library
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -20,6 +24,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -38,9 +43,14 @@ import com.openreachtube.app.ui.components.VideoRow
 fun LibraryScreen(
     onOpenVideo: (String) -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenDownloads: () -> Unit,
     viewModel: LibraryViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
+    val importMessage by viewModel.importMessage.collectAsState()
+    val historyPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent(),
+    ) { uri -> uri?.let(viewModel::importHistory) }
 
     LazyColumn(
         Modifier
@@ -74,8 +84,35 @@ fun LibraryScreen(
             }
         }
 
+        item {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "History",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(onClick = { historyPicker.launch("*/*") }) { Text("Import") }
+                TextButton(onClick = viewModel::clearHistory) { Text("Clear") }
+            }
+        }
+        if (importMessage != null) {
+            item {
+                Text(
+                    importMessage ?: "",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                )
+            }
+        }
+
         if (state.history.isNotEmpty()) {
-            item { SectionTitle("History") }
             item {
                 LazyRow(
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp),
@@ -93,16 +130,24 @@ fun LibraryScreen(
             Row(
                 Modifier
                     .fillMaxWidth()
+                    .clickable { onOpenDownloads() }
                     .padding(horizontal = 16.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Icon(Icons.Filled.Download, contentDescription = null)
-                Text(
-                    "Downloads (${state.downloads})",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                )
+                Column {
+                    Text(
+                        "Downloads (${state.downloads})",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        "Tap to manage downloaded files",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
 

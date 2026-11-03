@@ -2,6 +2,8 @@ package com.openreachtube.app.data.repository
 
 import com.openreachtube.app.data.local.dao.UserInterestDao
 import com.openreachtube.app.data.local.entity.UserInterestEntity
+import com.openreachtube.app.data.network.PoTokenEngine
+import com.openreachtube.app.domain.model.ChannelInfo
 import com.openreachtube.app.domain.model.CommentItem
 import com.openreachtube.app.domain.model.PaginatedList
 import com.openreachtube.app.domain.model.SearchTab
@@ -17,60 +19,87 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import org.schabi.newpipe.extractor.InfoItem
-import org.schabi.newpipe.extractor.Image
 import org.schabi.newpipe.extractor.ServiceList
 import org.schabi.newpipe.extractor.channel.ChannelInfo
+import org.schabi.newpipe.extractor.channel.ChannelInfoItem
 import org.schabi.newpipe.extractor.channel.tabs.ChannelTabInfo
 import org.schabi.newpipe.extractor.comments.CommentsInfo
 import org.schabi.newpipe.extractor.comments.CommentsInfoItem
+import org.schabi.newpipe.extractor.image.Image
 import org.schabi.newpipe.extractor.kiosk.KioskInfo
+import org.schabi.newpipe.extractor.linkhandler.LinkHandler
 import org.schabi.newpipe.extractor.search.SearchInfo
-import org.schabi.newpipe.extractor.services.youtube.linkHandler.YoutubeSearchQueryHandlerFactory
-import org.schabi.newpipe.extractor.stream.AudioStream
 import org.schabi.newpipe.extractor.stream.StreamInfo
 import org.schabi.newpipe.extractor.stream.StreamInfoItem
-import org.schabi.newpipe.extractor.stream.SubtitlesStream
-import org.schabi.newpipe.extractor.stream.VideoStream
 
 /**
- * Repository layer over NewPipeExtractor's YouTube service (original adapter code).
- * Every call runs on IO and degrades to empty results on extraction failures so the
- * UI can always render something (with a retry affordance instead of a dead end).
+ * Repository layer over NewPipeExtractor's YouTube service (original adapter
+ * code, v0.3.0). Every call degrades gracefully: failures map to empty results
+ * so one broken rail never takes down the screen.
  */
+
+/** Picks the largest image URL; extractor returns ordered-agnostic Image lists. */
+private fun List<Image>.bestUrl(): String? =
+    maxByOrNull { (it.height.toLong() + 1) * (it.width.toLong() + 1) }?.url
+
+/** Maps any extractor InfoItem onto the domain model; null when unsupported. */
+private fun InfoItem.toVideoItem(): VideoItem? = runCatching {
+    when (infoType) {
+        InfoItem.InfoType.STREAM -> {
+            val s = this as StreamInfoItem
+            VideoItem(
+                id = s.url,
+                title = s.name,
+                uploader = s.uploaderName ?: "Unknown",
+                uploaderUrl = s.uploaderUrl,
+                thumbnailUrl = s.thumbnails.bestUrl(),
+                durationSeconds = if (s.duration > 0) s.duration / 1000 else 0,
+                viewCount = s.viewCount,
+                uploadDate = s.textualUploadDate,
+                isShort = s.duration in 1..SHORT_MAX_MILLIS,
+            )
+        }
+        InfoItem.InfoType.CHANNEL -> {
+            val c = this as ChannelInfoItem
+            VideoItem(
+                id = c.url,
+                title = c.name,
+                uploader = c.name,
+                thumbnailUrl = c.thumbnails.bestUrl(),
+                viewCount = c.subscriberCount,
+                isChannel = true,
+            )
+        }
+        else -> null
+    }
+}.getOrNull()
+
+private const val SHORT_MAX_MILLIS = 3 * 60 * 1000L
+
 @Singleton
 class VideoRepository @Inject constructor(
     private val userInterestDao: UserInterestDao,
 ) {
     data class HomeFeed(
-        val categories: List<String> = listOf("All", "Music", "Gaming", "News", "Movies"),
+        val forYou: List<VideoItem> = emptyList(),
+        val latest: List<VideoItem> = emptyList(),
         val trending: List<VideoItem> = emptyList(),
     )
 
-    companion object {
-        private const val TRENDING_URL = "https://www.youtube.com/feed/trending"
+    /** Trending kiosk feeds the three home rails (For You is interest-ranked). */
+    suspend fun loadHomeFeed(): HomeFeed = withContext(Dispatchers.IO) {
+        val trending = runCatching {
+            KioskInfo.getInfo(ServiceList.YouTube, ServiceList.YouTube.kioskList.defaultKioskId)
+                .relatedItems.mapNotNull { it.toVideoItem() }
+        }.getOrDefault(emptyList())
+        HomeFeed(
+            forYou = trending,
+            latest = trending.sortedByDescending { it.uploadDate ?: "" },
+            trending = trending,
+        )
     }
 
-    /** Category chips: "All" (trending kiosk) + the service's own kiosk lineup. */
-    suspend fun availableCategories(): List<String> = withContext(Dispatchers.IO) {
-        runCatching {
-            listOf("All") + ServiceList.YouTube.kioskList.availableKiosks
-                .filter { !it.equals("Trending", ignoreCase = true) }
-                .take(5)
-        }.getOrDefault(listOf("All", "Music", "Gaming", "News", "Movies"))
-    }
-
-    /** "All" loads the trending kiosk; any other category searches YouTube for it. */
-    suspend fun loadCategory(category: String): List<VideoItem> = withContext(Dispatchers.IO) {
-        if (category.equals("All", ignoreCase = true)) {
-            runCatching {
-                KioskInfo.getInfo(ServiceList.YouTube, TRENDING_URL).relatedItems
-                    .mapNotNull { it.toVideoItem() }
-            }.getOrDefault(emptyList())
-        } else {
-            searchExtracted(category, YoutubeSearchQueryHandlerFactory.VIDEOS)
-        }
-    }
-
+    /** Per-channel latest uploads, fetched in parallel (max 10 channels). */
     suspend fun subscriptionsFeed(channelUrls: List<String>): List<VideoItem> =
         withContext(Dispatchers.IO) {
             coroutineScope {
@@ -90,9 +119,35 @@ class VideoRepository @Inject constructor(
             }
         }
 
+    /** Channel page header, mapped onto the pure domain model. */
+    suspend fun channelHeader(url: String): ChannelInfo = withContext(Dispatchers.IO) {
+        val info = ChannelInfo.getInfo(ServiceList.YouTube, url)
+        ChannelInfo(
+            id = info.url,
+            name = info.name,
+            avatarUrl = info.avatars.bestUrl(),
+            subscriberCount = info.subscriberCount,
+            description = info.description,
+        )
+    }
+
+    /** One channel content tab ("videos", "shorts", …) as a video list. */
+    suspend fun channelTab(channelUrl: String, tabFilter: String): List<VideoItem> =
+        withContext(Dispatchers.IO) {
+            val info = ChannelInfo.getInfo(ServiceList.YouTube, channelUrl)
+            val handler: LinkHandler? = info.tabs.firstOrNull { tab ->
+                tab.contentFilters.any { it.equals(tabFilter, ignoreCase = true) }
+            }
+            if (handler == null) emptyList()
+            else runCatching {
+                ChannelTabInfo.getInfo(ServiceList.YouTube, handler)
+                    .relatedItems.mapNotNull { it.toVideoItem() }
+            }.getOrDefault(emptyList())
+        }
+
     /** Local "For You" ranking: boosts titles matching recorded user interests. */
     suspend fun rankByInterest(items: List<VideoItem>): List<VideoItem> {
-        val interests = userInterestDao.top()
+        val interests = runCatching { userInterestDao.top() }.getOrDefault(emptyList())
         if (interests.isEmpty()) return items
         return items.sortedByDescending { item ->
             val lower = item.title.lowercase()
@@ -110,56 +165,114 @@ class VideoRepository @Inject constructor(
 
 @Singleton
 class SearchRepository @Inject constructor() {
+
+    /** Full-text search; the tab maps to an extractor content filter. */
     suspend fun search(query: String, tab: SearchTab): List<VideoItem> =
         withContext(Dispatchers.IO) {
-            val filter = when (tab) {
-                SearchTab.VIDEOS -> YoutubeSearchQueryHandlerFactory.VIDEOS
-                SearchTab.CHANNELS -> YoutubeSearchQueryHandlerFactory.CHANNELS
-                else -> null
-            }
-            searchExtracted(query, filter).let { items ->
-                if (tab == SearchTab.SHORTS) items.filter { it.durationSeconds in 1..90 }
-                else items
-            }
+            runCatching {
+                val contentFilter = when (tab) {
+                    SearchTab.ALL -> ""
+                    SearchTab.VIDEOS -> "videos"
+                    SearchTab.CHANNELS -> "channels"
+                    SearchTab.SHORTS -> "shorts"
+                }
+                val handler = ServiceList.YouTube.searchQueryHandlerFactory.getSearchQueryHandler(
+                    ServiceList.YouTube.serviceId, query, listOf(contentFilter), "",
+                )
+                SearchInfo.getInfo(ServiceList.YouTube, handler)
+                    .relatedItems.mapNotNull { it.toVideoItem() }
+            }.getOrDefault(emptyList())
         }
 }
 
 @Singleton
 class ShortsRepository @Inject constructor() {
-    /** Shorts feed: the #shorts hashtag search filtered to vertical-length videos. */
+
+    /** Vertical Shorts feed via the "shorts" search filter, with continuation. */
     suspend fun shortsFeed(continuation: String?): PaginatedList<VideoItem> =
         withContext(Dispatchers.IO) {
-            val items = runCatching {
-                searchExtracted("#shorts", YoutubeSearchQueryHandlerFactory.VIDEOS)
-                    .filter { it.durationSeconds in 1..90 }
-                    .map { it.copy(isShort = true) }
-                    .take(30)
-            }.getOrDefault(emptyList())
-            PaginatedList(items, null)
+            runCatching {
+                val service = ServiceList.YouTube
+                val handler = service.searchQueryHandlerFactory.getSearchQueryHandler(
+                    service.serviceId, "shorts", listOf("shorts"), "",
+                )
+                val items: List<InfoItem>
+                val next: org.schabi.newpipe.extractor.page.Page?
+                if (continuation == null) {
+                    val info = SearchInfo.getInfo(service, handler)
+                    items = info.relatedItems
+                    next = info.nextPage
+                } else {
+                    val page = SearchInfo.getMoreItems(
+                        service, handler, org.schabi.newpipe.extractor.page.Page.fromUrl(continuation),
+                    )
+                    items = page.items
+                    next = page.nextPage
+                }
+                PaginatedList(items.mapNotNull { it.toVideoItem() }, next?.url)
+            }.getOrDefault(PaginatedList(emptyList(), null))
         }
 }
 
 @Singleton
-class StreamRepository @Inject constructor() {
+class StreamRepository @Inject constructor(
+    private val poTokenEngine: PoTokenEngine,
+) {
+
+    /** Resolves one video into playable streams + metadata + related items. */
     suspend fun resolve(videoUrl: String): StreamBundle = withContext(Dispatchers.IO) {
         val info = StreamInfo.getInfo(ServiceList.YouTube, videoUrl)
+        val poToken = runCatching { poTokenEngine.generate(info.id, info.id) }.getOrNull()
+
         val streams = buildList {
-            addAll(info.videoStreams.map { it.toOption(isAudioOnly = false, videoOnly = false) })
-            addAll(info.videoOnlyStreams.map { it.toOption(isAudioOnly = false, videoOnly = true) })
-            addAll(info.audioStreams.map { it.toOption(isAudioOnly = true, videoOnly = false) })
+            info.videoStreams.forEach { v ->
+                val url = v.url ?: return@forEach
+                add(
+                    StreamOption(
+                        url = url,
+                        mimeType = v.format?.mimeType ?: "video/mp4",
+                        width = v.width,
+                        height = v.height,
+                        averageBitrate = v.averageBitrate,
+                        isVideoOnly = v.isVideoOnly,
+                        poToken = poToken,
+                    ),
+                )
+            }
+            info.audioStreams.forEach { a ->
+                val url = a.url ?: return@forEach
+                add(
+                    StreamOption(
+                        url = url,
+                        mimeType = a.format?.mimeType ?: "audio/mp4",
+                        averageBitrate = a.averageBitrate,
+                        isAudioOnly = true,
+                        poToken = poToken,
+                    ),
+                )
+            }
         }
+
         StreamBundle(
             videoId = info.url,
             title = info.name,
-            uploader = info.uploaderName ?: "Unknown",
+            uploader = info.uploaderName,
             uploaderUrl = info.uploaderUrl,
             thumbnailUrl = info.thumbnails.bestUrl(),
-            durationSeconds = info.duration,
+            durationSeconds = if (info.duration > 0) info.duration / 1000 else 0,
             viewCount = info.viewCount,
             uploadDate = info.textualUploadDate,
             streams = streams,
-            hlsUrl = info.hlsUrl.takeIf { it.isNotBlank() },
-            subtitles = info.subtitles.map { it.toItem() },
+            hlsUrl = info.hlsUrl,
+            subtitles = info.subtitles.mapNotNull { s ->
+                runCatching {
+                    SubtitleItem(
+                        languageTag = s.languageTag,
+                        url = s.url ?: "",
+                        isAutoGenerated = s.isAutoGenerated,
+                    )
+                }.getOrNull()
+            },
             related = info.relatedItems.mapNotNull { it.toVideoItem() },
         )
     }
@@ -167,82 +280,24 @@ class StreamRepository @Inject constructor() {
 
 @Singleton
 class CommentsRepository @Inject constructor() {
-    suspend fun commentsFor(videoUrl: String): List<CommentItem> = withContext(Dispatchers.IO) {
-        runCatching {
-            CommentsInfo.getInfo(ServiceList.YouTube, videoUrl).relatedItems
-                .filterIsInstance<CommentsInfoItem>()
-                .map { item ->
-                    CommentItem(
-                        id = item.commentId,
-                        author = item.name ?: "Anonymous",
-                        text = item.commentText?.content.orEmpty(),
-                        likeCount = item.likeCount.toLong(),
-                        publishedAgo = runCatching {
-                            item.uploadDate?.offsetDateTime()?.toLocalDate()?.toString()
-                        }.getOrNull(),
-                    )
-                }
-        }.getOrDefault(emptyList())
-    }
-}
 
-/** Runs a YouTube search with an optional filter and maps recognized items. */
-private suspend fun searchExtracted(query: String, filter: String?): List<VideoItem> =
-    withContext(Dispatchers.IO) {
-        runCatching {
-            val qh = ServiceList.YouTube.searchQHFactory
-            val handler = if (filter == null) qh.fromQuery(query)
-            else qh.fromQuery(query, listOf(filter), "")
-            SearchInfo.getInfo(ServiceList.YouTube, handler).relatedItems
-                .mapNotNull { it.toVideoItem() }
-        }.getOrDefault(emptyList())
-    }
-
-private fun InfoItem.toVideoItem(): VideoItem? = when (infoType) {
-    InfoItem.InfoType.STREAM -> (this as StreamInfoItem).toVideoItem()
-    InfoItem.InfoType.CHANNEL -> VideoItem(
-        id = url, title = name ?: "Channel", uploader = "Channel", uploaderUrl = url,
-        thumbnailUrl = thumbnails.bestUrl(),
-    )
-    else -> null
-}
-
-private fun StreamInfoItem.toVideoItem() = VideoItem(
-    id = url,
-    title = name ?: "",
-    uploader = uploaderName ?: "",
-    uploaderUrl = uploaderUrl,
-    thumbnailUrl = thumbnails.bestUrl(),
-    durationSeconds = duration,
-    viewCount = viewCount,
-    uploadDate = textualUploadDate,
-    isShort = duration in 1..90,
-)
-
-private fun VideoStream.toOption(isAudioOnly: Boolean, videoOnly: Boolean) = StreamOption(
-    url = url.orEmpty(),
-    mimeType = format?.mimeType.orEmpty(),
-    width = width,
-    height = height,
-    isAudioOnly = isAudioOnly,
-    isVideoOnly = videoOnly,
-)
-
-private fun AudioStream.toOption(isAudioOnly: Boolean, videoOnly: Boolean) = StreamOption(
-    url = url.orEmpty(),
-    mimeType = format?.mimeType.orEmpty(),
-    isAudioOnly = isAudioOnly,
-    isVideoOnly = videoOnly,
-)
-
-private fun SubtitlesStream.toItem() = SubtitleItem(
-    languageTag = languageTag,
-    url = url.orEmpty(),
-    isAutoGenerated = isAutoGenerated,
-)
-
-/** Picks the largest known-resolution thumbnail (falls back to the last entry). */
-private fun List<Image>?.bestUrl(): String? = when {
-    this == null || isEmpty() -> null
-    else -> maxByOrNull { it.height.coerceAtLeast(0) * 10_000 + it.width.coerceAtLeast(0) }?.url
+    /** Top-level comments for a video; failures degrade to an empty list. */
+    suspend fun commentsFor(videoUrl: String): List<CommentItem> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                CommentsInfo.getInfo(ServiceList.YouTube, videoUrl)
+                    .relatedItems.mapNotNull { item ->
+                        runCatching {
+                            val c = item as CommentsInfoItem
+                            CommentItem(
+                                id = c.commentId ?: c.url ?: "",
+                                author = c.uploaderName ?: "Unknown",
+                                text = c.commentText ?: "",
+                                likeCount = c.likeCount,
+                                publishedAgo = c.textualUploadDate,
+                            )
+                        }.getOrNull()
+                    }
+            }.getOrDefault(emptyList())
+        }
 }

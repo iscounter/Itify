@@ -7,7 +7,6 @@ import com.openreachtube.app.data.local.dao.ChunkDao
 import com.openreachtube.app.data.local.dao.FavoriteDao
 import com.openreachtube.app.data.local.dao.HistoryDao
 import com.openreachtube.app.data.local.dao.LocalPlaylistDao
-import com.openreachtube.app.data.local.dao.MissionDao
 import com.openreachtube.app.data.local.dao.SearchHistoryDao
 import com.openreachtube.app.data.local.dao.SubscriptionDao
 import com.openreachtube.app.data.local.dao.UserInterestDao
@@ -47,6 +46,7 @@ object DatabaseModule {
     @Provides fun subscriptionDao(db: AppDatabase): SubscriptionDao = db.subscriptionDao()
     @Provides fun userInterestDao(db: AppDatabase): UserInterestDao = db.userInterestDao()
     @Provides fun localPlaylistDao(db: AppDatabase): LocalPlaylistDao = db.localPlaylistDao()
-    @Provides fun missionDao(db: AppDatabase): MissionDao = db.missionDao()
     @Provides fun chunkDao(db: AppDatabase): ChunkDao = db.chunkDao()
+    @Provides fun missionDao(db: AppDatabase): com.openreachtube.app.data.local.dao.MissionDao = db.missionDao()
+    @Provides fun feedCacheDao(db: AppDatabase): com.openreachtube.app.data.local.dao.FeedCacheDao = db.feedCacheDao()
 }

@@ -88,11 +88,10 @@ class ChunkedDownloader @Inject constructor(
                 .header("Range", "bytes=${chunk.startByte + chunk.downloadedBytes}-${chunk.endByte}")
                 .build()
             okHttpClient.newCall(req).execute().use { resp ->
-                val body = resp.body ?: return@use
                 val out = java.io.RandomAccessFile(target, "rw")
                 out.use { raf ->
                     raf.seek(chunk.startByte + chunk.downloadedBytes)
-                    val src = body.byteStream()
+                    val src = resp.body?.byteStream() ?: error("Empty download body")
                     val buffer = ByteArray(64 * 1024)
                     var read: Int
                     while (src.read(buffer).also { read = it } != -1) {

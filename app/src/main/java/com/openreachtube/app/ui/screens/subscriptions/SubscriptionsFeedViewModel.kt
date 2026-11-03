@@ -1,7 +1,9 @@
 package com.openreachtube.app.ui.screens.subscriptions
 
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.openreachtube.app.data.local.TakeoutImporter
 import com.openreachtube.app.data.local.dao.SubscriptionDao
 import com.openreachtube.app.data.local.entity.SubscriptionEntity
 import com.openreachtube.app.data.repository.VideoRepository
@@ -25,10 +27,14 @@ data class SubscriptionsUiState(
 class SubscriptionsFeedViewModel @Inject constructor(
     private val videoRepository: VideoRepository,
     private val subscriptionDao: SubscriptionDao,
+    private val importer: TakeoutImporter,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(SubscriptionsUiState())
     val state: StateFlow<SubscriptionsUiState> = _state
+
+    private val _importMessage = MutableStateFlow<String?>(null)
+    val importMessage: StateFlow<String?> = _importMessage
 
     init { refresh() }
 
@@ -57,6 +63,20 @@ class SubscriptionsFeedViewModel @Inject constructor(
                         error = it.message,
                     )
                 }
+        }
+    }
+
+    /** Imports subscriptions from a Google-Takeout/NewPipe-style CSV/ZIP document. */
+    fun importSubscriptions(uri: Uri) {
+        viewModelScope.launch {
+            _importMessage.value = "Importing…"
+            importer.importSubscriptions(uri).fold(
+                onSuccess { count ->
+                    _importMessage.value = "Imported $count subscriptions."
+                    refresh()
+                },
+                onFailure { _importMessage.value = "Import failed: ${it.message}" },
+            )
         }
     }
 }

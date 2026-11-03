@@ -28,8 +28,8 @@ class UpdateChecker @Inject constructor() {
 
     private val http = HttpClient { install(ContentNegotiation) { json() } }
 
-    // TODO(phase-6): replace with your own releases feed.
-    private val releasesUrl = "https://api.github.com/repos/YOUR_ACCOUNT/OpenReachTube/releases/latest"
+    // Releases feed for the in-app updater (UpdateInstaller) — this remake's repo.
+    private val releasesUrl = "https://api.github.com/repos/Rahulhaldar/Itify/releases/latest"
 
     suspend fun latest(): ReleaseDto? = runCatching {
         http.get(releasesUrl).body<ReleaseDto>()

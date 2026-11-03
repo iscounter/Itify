@@ -2,10 +2,8 @@ package com.openreachtube.app.ui.screens.search
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.openreachtube.app.data.local.dao.SearchHistoryDao
-import com.openreachtube.app.data.local.entity.SearchHistoryEntity
+import com.openreachtube.app.data.local.SearchHistoryDao
 import com.openreachtube.app.data.repository.SearchRepository
-import com.openreachtube.app.data.repository.VideoRepository
 import com.openreachtube.app.domain.model.SearchTab
 import com.openreachtube.app.domain.model.VideoItem
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -22,7 +20,6 @@ data class SearchUiState(
     val loading: Boolean = false,
     val results: List<VideoItem> = emptyList(),
     val recentSearches: List<String> = emptyList(),
-    val error: String? = null,
 )
 
 /** Search across All / Videos / Channels / Shorts with persisted recent queries. */
@@ -31,7 +28,6 @@ data class SearchUiState(
 class SearchViewModel @Inject constructor(
     private val searchRepository: SearchRepository,
     private val searchHistoryDao: SearchHistoryDao,
-    private val videoRepository: VideoRepository,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(SearchUiState())
@@ -49,7 +45,7 @@ class SearchViewModel @Inject constructor(
     }
 
     fun onQueryChanged(q: String) {
-        _state.value = _state.value.copy(query = q, error = null)
+        _state.value = _state.value.copy(query = q)
         queryFlow.value = q
     }
 
@@ -60,15 +56,12 @@ class SearchViewModel @Inject constructor(
 
     private suspend fun runSearch(query: String) {
         if (query.isBlank()) return
-        _state.value = _state.value.copy(loading = true, error = null)
+        _state.value = _state.value.copy(loading = true)
         runCatching { searchRepository.search(query, _state.value.tab) }
             .onSuccess { results ->
                 _state.value = _state.value.copy(loading = false, results = results)
-                searchHistoryDao.insert(SearchHistoryEntity(query = query.trim()))
-                videoRepository.recordInterest(query)
+                searchHistoryDao.insert(query)
             }
-            .onFailure {
-                _state.value = _state.value.copy(loading = false, error = it.message)
-            }
+            .onFailure { _state.value = _state.value.copy(loading = false) }
     }
 }

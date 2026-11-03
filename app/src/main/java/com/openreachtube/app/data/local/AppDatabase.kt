@@ -39,7 +39,7 @@ import com.openreachtube.app.data.local.entity.UserInterestEntity
         DownloadChunkEntity::class,
     ],
     version = 1,
-    exportSchema = false,
+    exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun historyDao(): HistoryDao

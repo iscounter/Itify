@@ -37,7 +37,11 @@ private class OkHttpDownloader(private val client: OkHttpClient) : Downloader() 
 
     override fun execute(request: Request): Response {
         val builder = okhttp3.Request.Builder().url(request.url())
-        request.headers().forEach { (name, values) -> values.forEach { builder.header(name, it) } }
+        // Browser-like default UA: YouTube throttles generic extractor clients.
+        builder.header("User-Agent", request.headers()["User-Agent"] ?: DEFAULT_USER_AGENT)
+        request.headers().forEach { (name, value) ->
+            if (!name.equals("User-Agent", ignoreCase = true)) builder.header(name, value)
+        }
         val body = request.dataToSend()
         when (request.httpMethod().uppercase()) {
             "POST" -> builder.post(okhttp3.RequestBody.create(null, body ?: ByteArray(0)))
@@ -49,9 +53,15 @@ private class OkHttpDownloader(private val client: OkHttpClient) : Downloader() 
         val resp = client.newCall(builder.build()).execute()
         resp.use {
             val bytes = it.body?.bytes() ?: ByteArray(0)
-            val headers: Map<String, List<String>> = it.headers.toMultimap()
+            val headers = it.headers.toMultimap().mapValues { (_, v) -> v.joinToString(", ") }
             if (it.code == 429) throw ReCaptchaException("rate limited", request.url())
-            return Response(it.code, it.message, headers, String(bytes), request.url())
+            return Response(it.code, it.message, headers, String(bytes), bytes)
         }
+    }
+
+    private companion object {
+        const val DEFAULT_USER_AGENT =
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+                "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
     }
 }

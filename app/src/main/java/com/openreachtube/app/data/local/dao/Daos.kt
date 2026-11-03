@@ -35,6 +35,9 @@ interface FavoriteDao {
     @Query("SELECT * FROM favorites ORDER BY addedAt DESC")
     fun allAsFlow(): Flow<List<FavoriteEntity>>
 
+    @Query("SELECT * FROM favorites")
+    suspend fun all(): List<FavoriteEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(entity: FavoriteEntity)
 
@@ -100,6 +103,9 @@ interface MissionDao {
 
     @Query("UPDATE download_missions SET status = :status WHERE missionId = :missionId")
     suspend fun setStatus(missionId: String, status: String)
+
+    @Query("DELETE FROM download_missions WHERE missionId = :missionId")
+    suspend fun delete(missionId: String)
 }
 
 @Dao

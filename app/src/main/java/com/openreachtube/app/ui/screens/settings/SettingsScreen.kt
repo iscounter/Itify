@@ -18,11 +18,14 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -30,6 +33,13 @@ import androidx.hilt.navigation.compose.hiltViewModel
 @Composable
 fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
     val settings by viewModel.settings.collectAsState(initial = null)
+    val updateState by viewModel.updateState.collectAsState()
+    val context = LocalContext.current
+    val appVersion = remember {
+        runCatching {
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName
+        }.getOrNull() ?: "?"
+    }
 
     Column(
         Modifier
@@ -73,6 +83,31 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
             )
         }
 
+        SettingsSection("Updates") {
+            SettingRow(
+                title = "Check for updates",
+                subtitle = updateState.message
+                    ?: "Polls the GitHub releases feed for a newer APK",
+            ) {
+                TextButton(
+                    onClick = viewModel::checkForUpdates,
+                    enabled = !updateState.checking,
+                ) {
+                    Text(if (updateState.checking) "Checking…" else "Check")
+                }
+            }
+            updateState.staged?.let { staged ->
+                SettingRow(
+                    title = "Install ${staged.tag}",
+                    subtitle = "Opens the Android package installer",
+                ) {
+                    TextButton(onClick = { context.startActivity(viewModel.installIntent(staged)) }) {
+                        Text("Install")
+                    }
+                }
+            }
+        }
+
         SettingsSection("About") {
             Row(
                 Modifier
@@ -85,7 +120,7 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
                 Column {
                     Text("OpenReachTube", style = MaterialTheme.typography.titleMedium)
                     Text(
-                        "Version 0.2.0 · streams and downloads via NewPipeExtractor",
+                        "Version $appVersion · streams and downloads via NewPipeExtractor",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

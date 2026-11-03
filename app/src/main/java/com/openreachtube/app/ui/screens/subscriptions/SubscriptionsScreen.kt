@@ -1,5 +1,7 @@
 package com.openreachtube.app.ui.screens.subscriptions
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -49,6 +51,32 @@ fun SubscriptionsScreen(
             fontWeight = FontWeight.ExtraBold,
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
         )
+        val importMessage by viewModel.importMessage.collectAsState()
+        val subsPicker = rememberLauncherForActivityResult(
+            ActivityResultContracts.GetContent(),
+        ) { uri -> uri?.let(viewModel::importSubscriptions) }
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                "Bring your existing subs from a CSV/ZIP export",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(onClick = { subsPicker.launch("*/*") }) { Text("Import") }
+        }
+        if (importMessage != null) {
+            Text(
+                importMessage ?: "",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 16.dp),
+            )
+        }
         when {
             state.loading -> Row(
                 Modifier.fillMaxWidth().padding(24.dp),

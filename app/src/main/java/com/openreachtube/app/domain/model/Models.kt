@@ -13,6 +13,8 @@ data class VideoItem(
     val isShort: Boolean = false,
     /** Seconds already watched (continue-playing progress bar). */
     val progressSeconds: Long = 0,
+    /** True when this item represents a channel (search results), not a video. */
+    val isChannel: Boolean = false,
 )
 
 data class ChannelInfo(

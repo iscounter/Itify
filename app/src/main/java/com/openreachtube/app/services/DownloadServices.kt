@@ -25,7 +25,7 @@ import kotlinx.coroutines.launch
  * (mirrors the measured two-service topology). Missions are passed as primitive
  * extras and re-materialized into Room for crash-resumable transfers.
  */
-abstract class DownloadServiceBase(
+sealed class DownloadServiceBase(
     private val channelId: String,
     private val notifTitle: String,
 ) : Service() {

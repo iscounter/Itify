@@ -3,6 +3,7 @@ package com.openreachtube.app.ui.screens.player
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,6 +17,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
@@ -50,6 +53,7 @@ import com.openreachtube.app.ui.components.SectionTitle
 import com.openreachtube.app.ui.components.VideoRow
 import com.openreachtube.app.ui.components.formatDuration
 import com.openreachtube.app.ui.components.formatViews
+import com.openreachtube.app.ui.theme.ZRed
 import com.openreachtube.app.ui.theme.ZTextMuted
 import kotlinx.coroutines.delay
 
@@ -59,7 +63,11 @@ import kotlinx.coroutines.delay
  * playing rail and lists comments + related videos.
  */
 @Composable
-fun PlayerScreen(url: String, viewModel: PlayerViewModel = hiltViewModel()) {
+fun PlayerScreen(
+    url: String,
+    onOpenChannel: (String) -> Unit = {},
+    viewModel: PlayerViewModel = hiltViewModel(),
+) {
     val state by viewModel.state.collectAsState()
     val context = LocalContext.current
     val bundle = state.bundle
@@ -194,11 +202,21 @@ fun PlayerScreen(url: String, viewModel: PlayerViewModel = hiltViewModel()) {
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             ChannelAvatar(bundle.uploader, null, size = 40.dp)
-                            Column(Modifier.weight(1f).padding(start = 10.dp)) {
+                            Column(
+                                Modifier
+                                    .weight(1f)
+                                    .clickable { bundle.uploaderUrl?.let(onOpenChannel) }
+                                    .padding(start = 10.dp),
+                            ) {
                                 Text(
                                     bundle.uploader,
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.SemiBold,
+                                )
+                                Text(
+                                    "View channel",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = ZRed,
                                 )
                             }
                             if (bundle.uploaderUrl != null) {
@@ -240,6 +258,17 @@ fun PlayerScreen(url: String, viewModel: PlayerViewModel = hiltViewModel()) {
                                 label = { Text("Download") },
                                 leadingIcon = {
                                     Icon(Icons.Filled.Download, contentDescription = null)
+                                },
+                            )
+                            AssistChip(
+                                onClick = viewModel::toggleLike,
+                                label = { Text(if (state.liked) "Liked" else "Like") },
+                                leadingIcon = {
+                                    Icon(
+                                        if (state.liked) Icons.Filled.Favorite
+                                        else Icons.Filled.FavoriteBorder,
+                                        contentDescription = null,
+                                    )
                                 },
                             )
                             AssistChip(
