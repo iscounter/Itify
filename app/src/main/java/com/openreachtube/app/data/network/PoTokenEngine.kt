@@ -26,7 +26,6 @@ class PoTokenEngine @Inject constructor(
         synchronized(this) {
             scope?.let { return it }
             val cx = ContextFactory.getGlobal().enterContext()
-            cx.optimizationLevel = -1 // interpreted mode: no per-device bytecode
             try {
                 val global = cx.initStandardObjects()
                 // TODO(phase-1): fetch and evaluate the BotGuard VM script here and

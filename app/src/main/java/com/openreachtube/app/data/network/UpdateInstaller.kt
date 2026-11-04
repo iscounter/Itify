@@ -49,7 +49,7 @@ class UpdateInstaller @Inject constructor(
                 http.newCall(Request.Builder().url(asset.browser_download_url).build())
                     .execute().use { resp ->
                         check(resp.isSuccessful) { "Update download failed: HTTP ${resp.code}" }
-                        val body = resp.body ?: error("Update download returned an empty body")
+                        val body = resp.body
                         body.byteStream().use { input ->
                             apk.outputStream().use { output -> input.copyTo(output) }
                         }

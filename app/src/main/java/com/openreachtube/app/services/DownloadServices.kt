@@ -24,8 +24,12 @@ import kotlinx.coroutines.launch
  * dataSync foreground services for video and M4A audio download missions
  * (mirrors the measured two-service topology). Missions are passed as primitive
  * extras and re-materialized into Room for crash-resumable transfers.
+ *
+ * Must stay a plain abstract class: Hilt's generated Java base classes
+ * (Hilt_VideoDownloadService / Hilt_AudioDownloadService) extend it directly,
+ * which sealed classes forbid.
  */
-sealed class DownloadServiceBase(
+abstract class DownloadServiceBase(
     private val channelId: String,
     private val notifTitle: String,
 ) : Service() {

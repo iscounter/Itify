@@ -37,7 +37,7 @@ object DatabaseModule {
     @Provides @Singleton
     fun database(@ApplicationContext context: Context): AppDatabase =
         Room.databaseBuilder(context, AppDatabase::class.java, AppDatabase.NAME)
-            .fallbackToDestructiveMigration()
+            .fallbackToDestructiveMigration(dropAllTables = true)
             .build()
 
     @Provides fun historyDao(db: AppDatabase): HistoryDao = db.historyDao()

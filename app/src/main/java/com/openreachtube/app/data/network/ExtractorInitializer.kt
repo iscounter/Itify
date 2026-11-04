@@ -5,6 +5,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 import okhttp3.OkHttpClient
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.schabi.newpipe.extractor.NewPipe
 import org.schabi.newpipe.extractor.downloader.Downloader
 import org.schabi.newpipe.extractor.downloader.Request
@@ -49,15 +50,15 @@ private class OkHttpDownloader(private val client: OkHttpClient) : Downloader() 
         }
         val body = request.dataToSend()
         when (request.httpMethod().uppercase()) {
-            "POST" -> builder.post(okhttp3.RequestBody.create(null, body ?: ByteArray(0)))
-            "PUT" -> builder.put(okhttp3.RequestBody.create(null, body ?: ByteArray(0)))
-            "PATCH" -> builder.patch(okhttp3.RequestBody.create(null, body ?: ByteArray(0)))
+            "POST" -> builder.post((body ?: ByteArray(0)).toRequestBody())
+            "PUT" -> builder.put((body ?: ByteArray(0)).toRequestBody())
+            "PATCH" -> builder.patch((body ?: ByteArray(0)).toRequestBody())
             "HEAD" -> builder.head()
             else -> builder.get()
         }
         val resp = client.newCall(builder.build()).execute()
         resp.use {
-            val bytes = it.body?.bytes() ?: ByteArray(0)
+            val bytes = it.body.bytes()
             if (it.code == 429) throw ReCaptchaException("rate limited", request.url())
             return Response(
                 it.code, it.message, it.headers.toMultimap(), String(bytes), request.url(),
