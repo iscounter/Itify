@@ -16,6 +16,8 @@ data class HomeUiState(
     val latest: List<VideoItem> = emptyList(),
     val trending: List<VideoItem> = emptyList(),
     val offline: Boolean = false,
+    /** Real cause when the feed fetch failed; shown in the UI with a retry. */
+    val errorMessage: String? = null,
 )
 
 /** Home feed: For You (local interest ranking), trending and latest rails. */
@@ -31,7 +33,7 @@ class HomeViewModel @Inject constructor(
 
     fun refresh() {
         viewModelScope.launch {
-            _state.value = _state.value.copy(loading = true)
+            _state.value = _state.value.copy(loading = true, errorMessage = null)
             runCatching { videoRepository.loadHomeFeed() }
                 .onSuccess { feed ->
                     _state.value = HomeUiState(
@@ -39,9 +41,13 @@ class HomeViewModel @Inject constructor(
                         forYou = videoRepository.rankByInterest(feed.trending),
                         latest = feed.latest,
                         trending = feed.trending,
+                        errorMessage = feed.error,
                     )
                 }
-                .onFailure { _state.value = HomeUiState(loading = false, offline = true) }
+                .onFailure {
+                    android.util.Log.e("ITIFY", "home feed crashed", it)
+                    _state.value = HomeUiState(loading = false, offline = true)
+                }
         }
     }
 }

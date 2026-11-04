@@ -1,5 +1,6 @@
 package com.openreachtube.app.data.repository
 
+import android.util.Log
 import com.openreachtube.app.data.local.dao.UserInterestDao
 import com.openreachtube.app.data.local.entity.UserInterestEntity
 import com.openreachtube.app.data.network.PoTokenEngine
@@ -42,6 +43,11 @@ import org.schabi.newpipe.extractor.stream.StreamInfoItem
 private fun List<Image>.bestUrl(): String? =
     maxByOrNull { (it.height.toLong() + 1) * (it.width.toLong() + 1) }?.url
 
+/** Single logcat tag for every data-layer failure; filter with `adb logcat -s ITIFY`. */
+private fun logFailure(where: String, t: Throwable) {
+    Log.e("ITIFY", "$where: ${t.javaClass.simpleName}: ${t.message}", t)
+}
+
 /** Maps any extractor InfoItem onto the domain model; null when unsupported. */
 private fun InfoItem.toVideoItem(): VideoItem? = runCatching {
     when (infoType) {
@@ -72,7 +78,7 @@ private fun InfoItem.toVideoItem(): VideoItem? = runCatching {
         }
         else -> null
     }
-}.getOrNull()
+}.onFailure { logFailure("map $infoType", it) }.getOrNull()
 
 private const val SHORT_MAX_MILLIS = 3 * 60 * 1000L
 
@@ -84,18 +90,24 @@ class VideoRepository @Inject constructor(
         val forYou: List<VideoItem> = emptyList(),
         val latest: List<VideoItem> = emptyList(),
         val trending: List<VideoItem> = emptyList(),
+        /** Non-null when the kiosk fetch itself failed; surfaced in the UI. */
+        val error: String? = null,
     )
 
     /** Trending kiosk feeds the three home rails (For You is interest-ranked). */
     suspend fun loadHomeFeed(): HomeFeed = withContext(Dispatchers.IO) {
-        val trending = runCatching {
+        val result = runCatching {
             KioskInfo.getInfo(ServiceList.YouTube, ServiceList.YouTube.kioskList.defaultKioskId)
                 .relatedItems.mapNotNull { it.toVideoItem() }
-        }.getOrDefault(emptyList())
+        }.onFailure { logFailure("trending kiosk", it) }
+        val trending = result.getOrElse { emptyList() }
         HomeFeed(
             forYou = trending,
             latest = trending.sortedByDescending { it.uploadDate ?: "" },
             trending = trending,
+            error = result.exceptionOrNull()?.let { ex ->
+                (ex.message ?: ex.javaClass.simpleName).take(160)
+            },
         )
     }
 
@@ -113,7 +125,8 @@ class VideoRepository @Inject constructor(
                             if (videosTab == null) emptyList()
                             else ChannelTabInfo.getInfo(ServiceList.YouTube, videosTab)
                                 .relatedItems.mapNotNull { it.toVideoItem() }
-                        }.getOrDefault(emptyList())
+                        }.onFailure { logFailure("subscription channel $url", it) }
+                            .getOrDefault(emptyList())
                     }
                 }.awaitAll().flatten()
             }
@@ -140,7 +153,8 @@ class VideoRepository @Inject constructor(
             else runCatching {
                 ChannelTabInfo.getInfo(ServiceList.YouTube, handler)
                     .relatedItems.mapNotNull { it.toVideoItem() }
-            }.getOrDefault(emptyList())
+            }.onFailure { logFailure("channel tab $tabFilter", it) }
+                .getOrDefault(emptyList())
         }
 
     /** Local "For You" ranking: boosts titles matching recorded user interests. */
@@ -179,7 +193,7 @@ class SearchRepository @Inject constructor() {
                 )
                 SearchInfo.getInfo(ServiceList.YouTube, handler)
                     .relatedItems.mapNotNull { it.toVideoItem() }
-            }.getOrDefault(emptyList())
+            }.onFailure { logFailure("search", it) }.getOrDefault(emptyList())
         }
 }
 
@@ -204,7 +218,8 @@ class ShortsRepository @Inject constructor() {
                     next = page.nextPage
                 }
                 PaginatedList(items.mapNotNull { it.toVideoItem() }, next?.url)
-            }.getOrDefault(PaginatedList(emptyList(), null))
+            }.onFailure { logFailure("shorts feed", it) }
+                .getOrDefault(PaginatedList(emptyList(), null))
         }
 }
 
@@ -290,8 +305,8 @@ class CommentsRepository @Inject constructor() {
                                 likeCount = c.likeCount.toLong(),
                                 publishedAgo = c.textualUploadDate,
                             )
-                        }.getOrNull()
+                        }.onFailure { logFailure("comment item", it) }.getOrNull()
                     }
-            }.getOrDefault(emptyList())
+            }.onFailure { logFailure("comments", it) }.getOrDefault(emptyList())
         }
 }
