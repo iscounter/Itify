@@ -18,16 +18,16 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
+import org.schabi.newpipe.extractor.Image
 import org.schabi.newpipe.extractor.InfoItem
+import org.schabi.newpipe.extractor.Page
 import org.schabi.newpipe.extractor.ServiceList
-import org.schabi.newpipe.extractor.channel.ChannelInfo
+import org.schabi.newpipe.extractor.channel.ChannelInfo as NpChannelInfo
 import org.schabi.newpipe.extractor.channel.ChannelInfoItem
 import org.schabi.newpipe.extractor.channel.tabs.ChannelTabInfo
 import org.schabi.newpipe.extractor.comments.CommentsInfo
 import org.schabi.newpipe.extractor.comments.CommentsInfoItem
-import org.schabi.newpipe.extractor.image.Image
 import org.schabi.newpipe.extractor.kiosk.KioskInfo
-import org.schabi.newpipe.extractor.linkhandler.LinkHandler
 import org.schabi.newpipe.extractor.search.SearchInfo
 import org.schabi.newpipe.extractor.stream.StreamInfo
 import org.schabi.newpipe.extractor.stream.StreamInfoItem
@@ -106,9 +106,9 @@ class VideoRepository @Inject constructor(
                 channelUrls.take(10).map { url ->
                     async {
                         runCatching {
-                            val channel = ChannelInfo.getInfo(ServiceList.YouTube, url)
+                            val channel = NpChannelInfo.getInfo(ServiceList.YouTube, url)
                             val videosTab = channel.tabs.firstOrNull { tab ->
-                                tab.contentFilters.any { it.equals("videos", ignoreCase = true) }
+                                tab.url.endsWith("/videos")
                             }
                             if (videosTab == null) emptyList()
                             else ChannelTabInfo.getInfo(ServiceList.YouTube, videosTab)
@@ -121,7 +121,7 @@ class VideoRepository @Inject constructor(
 
     /** Channel page header, mapped onto the pure domain model. */
     suspend fun channelHeader(url: String): ChannelInfo = withContext(Dispatchers.IO) {
-        val info = ChannelInfo.getInfo(ServiceList.YouTube, url)
+        val info = NpChannelInfo.getInfo(ServiceList.YouTube, url)
         ChannelInfo(
             id = info.url,
             name = info.name,
@@ -134,10 +134,8 @@ class VideoRepository @Inject constructor(
     /** One channel content tab ("videos", "shorts", …) as a video list. */
     suspend fun channelTab(channelUrl: String, tabFilter: String): List<VideoItem> =
         withContext(Dispatchers.IO) {
-            val info = ChannelInfo.getInfo(ServiceList.YouTube, channelUrl)
-            val handler: LinkHandler? = info.tabs.firstOrNull { tab ->
-                tab.contentFilters.any { it.equals(tabFilter, ignoreCase = true) }
-            }
+            val info = NpChannelInfo.getInfo(ServiceList.YouTube, channelUrl)
+            val handler = info.tabs.firstOrNull { tab -> tab.url.endsWith("/$tabFilter") }
             if (handler == null) emptyList()
             else runCatching {
                 ChannelTabInfo.getInfo(ServiceList.YouTube, handler)
@@ -176,8 +174,8 @@ class SearchRepository @Inject constructor() {
                     SearchTab.CHANNELS -> "channels"
                     SearchTab.SHORTS -> "shorts"
                 }
-                val handler = ServiceList.YouTube.searchQueryHandlerFactory.getSearchQueryHandler(
-                    ServiceList.YouTube.serviceId, query, listOf(contentFilter), "",
+                val handler = ServiceList.YouTube.searchQHFactory.fromQuery(
+                    query, listOf(contentFilter), "",
                 )
                 SearchInfo.getInfo(ServiceList.YouTube, handler)
                     .relatedItems.mapNotNull { it.toVideoItem() }
@@ -193,19 +191,15 @@ class ShortsRepository @Inject constructor() {
         withContext(Dispatchers.IO) {
             runCatching {
                 val service = ServiceList.YouTube
-                val handler = service.searchQueryHandlerFactory.getSearchQueryHandler(
-                    service.serviceId, "shorts", listOf("shorts"), "",
-                )
+                val handler = service.searchQHFactory.fromQuery("shorts", listOf("shorts"), "")
                 val items: List<InfoItem>
-                val next: org.schabi.newpipe.extractor.page.Page?
+                val next: Page?
                 if (continuation == null) {
                     val info = SearchInfo.getInfo(service, handler)
                     items = info.relatedItems
                     next = info.nextPage
                 } else {
-                    val page = SearchInfo.getMoreItems(
-                        service, handler, org.schabi.newpipe.extractor.page.Page.fromUrl(continuation),
-                    )
+                    val page = SearchInfo.getMoreItems(service, handler, Page(continuation))
                     items = page.items
                     next = page.nextPage
                 }
@@ -233,7 +227,7 @@ class StreamRepository @Inject constructor(
                         mimeType = v.format?.mimeType ?: "video/mp4",
                         width = v.width,
                         height = v.height,
-                        averageBitrate = v.averageBitrate,
+                        averageBitrate = v.bitrate.toLong(),
                         isVideoOnly = v.isVideoOnly,
                         poToken = poToken,
                     ),
@@ -245,7 +239,7 @@ class StreamRepository @Inject constructor(
                     StreamOption(
                         url = url,
                         mimeType = a.format?.mimeType ?: "audio/mp4",
-                        averageBitrate = a.averageBitrate,
+                        averageBitrate = a.averageBitrate.toLong(),
                         isAudioOnly = true,
                         poToken = poToken,
                     ),
@@ -292,8 +286,8 @@ class CommentsRepository @Inject constructor() {
                             CommentItem(
                                 id = c.commentId ?: c.url ?: "",
                                 author = c.uploaderName ?: "Unknown",
-                                text = c.commentText ?: "",
-                                likeCount = c.likeCount,
+                                text = c.commentText.content,
+                                likeCount = c.likeCount.toLong(),
                                 publishedAgo = c.textualUploadDate,
                             )
                         }.getOrNull()

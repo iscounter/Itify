@@ -69,8 +69,8 @@ class LibraryViewModel @Inject constructor(
         viewModelScope.launch {
             _importMessage.value = "Importing…"
             importer.importHistory(uri).fold(
-                onSuccess { count -> _importMessage.value = "Imported $count history entries." },
-                onFailure { _importMessage.value = "Import failed: ${it.message}" },
+                onSuccess = { count -> _importMessage.value = "Imported $count history entries." },
+                onFailure = { _importMessage.value = "Import failed: ${it.message}" },
             )
         }
     }

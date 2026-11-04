@@ -17,30 +17,36 @@ data class NotificationsUiState(
     val empty: Boolean = false,
 )
 
-/** In-app notification feed: latest uploads from subscribed channels. */
+/** Notifications tab: the newest uploads across subscribed channels. */
 @HiltViewModel
 class NotificationsViewModel @Inject constructor(
-    private val videoRepository: VideoRepository,
     private val subscriptionDao: SubscriptionDao,
+    private val videoRepository: VideoRepository,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(NotificationsUiState())
     val state: StateFlow<NotificationsUiState> = _state
 
-    init { refresh() }
+    init { load() }
 
-    fun refresh() {
+    fun load() {
         viewModelScope.launch {
             val subs = runCatching { subscriptionDao.all() }.getOrDefault(emptyList())
             if (subs.isEmpty()) {
                 _state.value = NotificationsUiState(loading = false, empty = true)
                 return@launch
             }
-            _state.value = NotificationsUiState(loading = true)
-            val items = runCatching {
+            val uploads = runCatching {
                 videoRepository.subscriptionsFeed(subs.map { it.channelUrl })
             }.getOrDefault(emptyList())
-            _state.value = NotificationsUiState(loading = false, items = items, empty = items.isEmpty())
+            _state.value = NotificationsUiState(
+                loading = false,
+                items = uploads.take(50),
+                empty = uploads.isEmpty(),
+            )
         }
     }
+
+    /** Re-pulls the subscriptions feed after an import or on pull-to-refresh. */
+    fun refresh() = load()
 }

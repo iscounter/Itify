@@ -71,11 +71,11 @@ class SubscriptionsFeedViewModel @Inject constructor(
         viewModelScope.launch {
             _importMessage.value = "Importing…"
             importer.importSubscriptions(uri).fold(
-                onSuccess { count ->
+                onSuccess = { count ->
                     _importMessage.value = "Imported $count subscriptions."
                     refresh()
                 },
-                onFailure { _importMessage.value = "Import failed: ${it.message}" },
+                onFailure = { _importMessage.value = "Import failed: ${it.message}" },
             )
         }
     }

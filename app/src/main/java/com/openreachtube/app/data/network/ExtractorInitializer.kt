@@ -38,9 +38,14 @@ private class OkHttpDownloader(private val client: OkHttpClient) : Downloader() 
     override fun execute(request: Request): Response {
         val builder = okhttp3.Request.Builder().url(request.url())
         // Browser-like default UA: YouTube throttles generic extractor clients.
-        builder.header("User-Agent", request.headers()["User-Agent"] ?: DEFAULT_USER_AGENT)
-        request.headers().forEach { (name, value) ->
-            if (!name.equals("User-Agent", ignoreCase = true)) builder.header(name, value)
+        builder.header(
+            "User-Agent",
+            request.headers()["User-Agent"]?.firstOrNull() ?: DEFAULT_USER_AGENT,
+        )
+        request.headers().forEach { (name, values) ->
+            if (!name.equals("User-Agent", ignoreCase = true)) {
+                values.firstOrNull()?.let { builder.header(name, it) }
+            }
         }
         val body = request.dataToSend()
         when (request.httpMethod().uppercase()) {
@@ -53,9 +58,10 @@ private class OkHttpDownloader(private val client: OkHttpClient) : Downloader() 
         val resp = client.newCall(builder.build()).execute()
         resp.use {
             val bytes = it.body?.bytes() ?: ByteArray(0)
-            val headers = it.headers.toMultimap().mapValues { (_, v) -> v.joinToString(", ") }
             if (it.code == 429) throw ReCaptchaException("rate limited", request.url())
-            return Response(it.code, it.message, headers, String(bytes), bytes)
+            return Response(
+                it.code, it.message, it.headers.toMultimap(), String(bytes), request.url(),
+            )
         }
     }
 

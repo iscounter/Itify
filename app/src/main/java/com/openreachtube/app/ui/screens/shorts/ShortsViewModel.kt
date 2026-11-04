@@ -28,7 +28,7 @@ class ShortsViewModel @Inject constructor(
                 .onSuccess { result ->
                     _feed.value = ShortsFeedResult(
                         items = _feed.value.items + result.items,
-                        continuation = result.continuation,
+                        continuation = result.nextPageUrl,
                     )
                 }
         }

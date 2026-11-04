@@ -80,7 +80,7 @@ class TakeoutImporter @Inject constructor(
     private fun readCsvRows(uri: Uri, prefer: String): List<List<String>> {
         val input: InputStream = context.contentResolver.openInputStream(uri)
             ?: throw IllegalStateException("Cannot open the selected file")
-        input.use { stream ->
+        return input.use { stream ->
             if (queryDisplayName(uri)?.endsWith(".zip", ignoreCase = true) == true) {
                 ZipInputStream(stream).use { zip ->
                     val fallback = mutableListOf<List<String>>()
