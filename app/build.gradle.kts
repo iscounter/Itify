@@ -90,7 +90,8 @@ dependencies {
     implementation(libs.ktor.serialization.kotlinx.json)
     implementation(libs.okhttp)
     implementation(libs.kotlinx.serialization.json)
-
+    
+    implementation(project(":extractor"))
     implementation(libs.newpipe.extractor)
     implementation(libs.rhino)
     implementation(libs.jsoup)

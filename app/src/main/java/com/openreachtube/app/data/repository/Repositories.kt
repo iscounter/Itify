@@ -104,7 +104,11 @@ class VideoRepository @Inject constructor(
     suspend fun loadHomeFeed(): HomeFeed = withContext(Dispatchers.IO) {
         val kioskList = ServiceList.YouTube.kioskList
         val trendingResult = runCatching {
-            KioskInfo.getInfo(kioskList.getExtractorById("Trending", null))
+            val extractor = kioskList.getExtractorById("Trending", null)
+            // KioskInfo.getInfo(extractor) requires fetchPage() to be called
+            // first — an unfetched extractor NPEs on its null page data
+            extractor.fetchPage()
+            KioskInfo.getInfo(extractor)
                 .relatedItems.mapNotNull { it.toVideoItem() }
         }.onFailure { logFailure("trending kiosk", it) }
         val trending = trendingResult.getOrElse { emptyList() }
@@ -117,7 +121,9 @@ class VideoRepository @Inject constructor(
         }
 
         val fallbackResult = runCatching {
-            KioskInfo.getInfo(kioskList.getDefaultKioskExtractor(null))
+            val extractor = kioskList.getDefaultKioskExtractor(null)
+            extractor.fetchPage()
+            KioskInfo.getInfo(extractor)
                 .relatedItems.mapNotNull { it.toVideoItem() }
         }.onFailure { logFailure("default kiosk (live)", it) }
         val fallback = fallbackResult.getOrElse { emptyList() }

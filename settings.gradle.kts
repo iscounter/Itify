@@ -15,3 +15,4 @@ dependencyResolutionManagement {
 }
 rootProject.name = "OpenReachTube"
 include(":app")
+include(":extractor")
