@@ -62,7 +62,7 @@ private fun InfoItem.toVideoItem(): VideoItem? = runCatching {
                 durationSeconds = if (s.duration > 0) s.duration / 1000 else 0,
                 viewCount = s.viewCount,
                 uploadDate = s.textualUploadDate,
-                isShort = s.duration in 1..SHORT_MAX_MILLIS,
+                isShort = s.isShortFormContent || s.duration in 1..SHORT_MAX_MILLIS,
             )
         }
         InfoItem.InfoType.CHANNEL -> {
@@ -94,20 +94,43 @@ class VideoRepository @Inject constructor(
         val error: String? = null,
     )
 
-    /** Trending kiosk feeds the three home rails (For You is interest-ranked). */
+    /**
+     * Home feed: the "Trending" kiosk when YouTube still serves it (removed from
+     * YouTube's interface in July 2025, so it may come back empty), falling back
+     * to the service default kiosk ("live" in extractor v0.26+). Kiosk extractors
+     * must be resolved by ID via KioskList — getInfo(service, kioskId) would
+     * instead try to match the bare id as a URL and fail.
+     */
     suspend fun loadHomeFeed(): HomeFeed = withContext(Dispatchers.IO) {
-        val result = runCatching {
-            KioskInfo.getInfo(ServiceList.YouTube, ServiceList.YouTube.kioskList.defaultKioskId)
+        val kioskList = ServiceList.YouTube.kioskList
+        val trendingResult = runCatching {
+            KioskInfo.getInfo(kioskList.getExtractorById("Trending", null))
                 .relatedItems.mapNotNull { it.toVideoItem() }
         }.onFailure { logFailure("trending kiosk", it) }
-        val trending = result.getOrElse { emptyList() }
+        val trending = trendingResult.getOrElse { emptyList() }
+        if (trending.isNotEmpty()) {
+            return@withContext HomeFeed(
+                forYou = trending,
+                latest = trending.sortedByDescending { it.uploadDate ?: "" },
+                trending = trending,
+            )
+        }
+
+        val fallbackResult = runCatching {
+            KioskInfo.getInfo(kioskList.getDefaultKioskExtractor(null))
+                .relatedItems.mapNotNull { it.toVideoItem() }
+        }.onFailure { logFailure("default kiosk (live)", it) }
+        val fallback = fallbackResult.getOrElse { emptyList() }
         HomeFeed(
-            forYou = trending,
-            latest = trending.sortedByDescending { it.uploadDate ?: "" },
-            trending = trending,
-            error = result.exceptionOrNull()?.let { ex ->
-                (ex.message ?: ex.javaClass.simpleName).take(160)
-            },
+            forYou = fallback,
+            latest = fallback.sortedByDescending { it.uploadDate ?: "" },
+            trending = fallback,
+            error = if (fallback.isEmpty()) {
+                val cause = trendingResult.exceptionOrNull()?.message
+                    ?: fallbackResult.exceptionOrNull()?.message
+                (cause ?: "Trending is unavailable and the default kiosk returned no videos")
+                    .take(160)
+            } else null,
         )
     }
 
@@ -183,16 +206,18 @@ class SearchRepository @Inject constructor() {
         withContext(Dispatchers.IO) {
             runCatching {
                 val contentFilter = when (tab) {
-                    SearchTab.ALL -> ""
                     SearchTab.VIDEOS -> "videos"
                     SearchTab.CHANNELS -> "channels"
-                    SearchTab.SHORTS -> "shorts"
+                    // "shorts" is not a valid extractor content filter; the Shorts
+                    // tab searches unfiltered and keeps short-form results only.
+                    else -> ""
                 }
                 val handler = ServiceList.YouTube.searchQHFactory.fromQuery(
                     query, listOf(contentFilter), "",
                 )
-                SearchInfo.getInfo(ServiceList.YouTube, handler)
+                val items = SearchInfo.getInfo(ServiceList.YouTube, handler)
                     .relatedItems.mapNotNull { it.toVideoItem() }
+                if (tab == SearchTab.SHORTS) items.filter { it.isShort } else items
             }.onFailure { logFailure("search", it) }.getOrDefault(emptyList())
         }
 }
@@ -200,24 +225,30 @@ class SearchRepository @Inject constructor() {
 @Singleton
 class ShortsRepository @Inject constructor() {
 
-    /** Vertical Shorts feed via the "shorts" search filter, with continuation. */
+    /**
+     * Vertical Shorts feed with continuation. The extractor has no "shorts"
+     * search filter, so the unfiltered web search is used and short-form items
+     * (reel/lockup renderers or duration ≤ 3 min) are kept; if a page has none,
+     * its regular results are shown rather than an empty feed.
+     */
     suspend fun shortsFeed(continuation: String?): PaginatedList<VideoItem> =
         withContext(Dispatchers.IO) {
             runCatching {
                 val service = ServiceList.YouTube
-                val handler = service.searchQHFactory.fromQuery("shorts", listOf("shorts"), "")
-                val items: List<InfoItem>
+                val handler = service.searchQHFactory.fromQuery("shorts", listOf(""), "")
+                val items: List<VideoItem>
                 val next: Page?
                 if (continuation == null) {
                     val info = SearchInfo.getInfo(service, handler)
-                    items = info.relatedItems
+                    items = info.relatedItems.mapNotNull { it.toVideoItem() }
                     next = info.nextPage
                 } else {
                     val page = SearchInfo.getMoreItems(service, handler, Page(continuation))
-                    items = page.items
+                    items = page.items.mapNotNull { it.toVideoItem() }
                     next = page.nextPage
                 }
-                PaginatedList(items.mapNotNull { it.toVideoItem() }, next?.url)
+                val shortsOnly = items.filter { it.isShort }
+                PaginatedList(shortsOnly.ifEmpty { items }, next?.url)
             }.onFailure { logFailure("shorts feed", it) }
                 .getOrDefault(PaginatedList(emptyList(), null))
         }

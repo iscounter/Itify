@@ -1,9 +1,9 @@
 package com.openreachtube.app.ui.screens.shorts
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.openreachtube.app.data.repository.ShortsRepository
-import com.openreachtube.app.domain.model.ShortsFeedResult
 import com.openreachtube.app.domain.model.VideoItem
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -11,24 +11,46 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
+data class ShortsUiState(
+    val items: List<VideoItem> = emptyList(),
+    val continuation: String? = null,
+    val loading: Boolean = false,
+    /** Real cause when the feed fetch failed; shown with a retry. */
+    val error: String? = null,
+)
+
 /** Vertical Shorts feed with continuation support. */
 @HiltViewModel
 class ShortsViewModel @Inject constructor(
     private val shortsRepository: ShortsRepository,
 ) : ViewModel() {
 
-    private val _feed = MutableStateFlow(ShortsFeedResult(emptyList()))
-    val feed: StateFlow<ShortsFeedResult> = _feed
+    private val _state = MutableStateFlow(ShortsUiState())
+    val state: StateFlow<ShortsUiState> = _state
 
     init { loadMore(null) }
 
     fun loadMore(continuation: String?) {
+        if (_state.value.loading) return
+        // The feed ends when the extractor returns no continuation; reloading
+        // the first page over an existing feed would just re-fetch the same items.
+        if (continuation == null && _state.value.items.isNotEmpty()) return
         viewModelScope.launch {
+            _state.value = _state.value.copy(loading = true)
             runCatching { shortsRepository.shortsFeed(continuation) }
                 .onSuccess { result ->
-                    _feed.value = ShortsFeedResult(
-                        items = _feed.value.items + result.items,
+                    val existing = _state.value.items.map { it.id }.toSet()
+                    _state.value = ShortsUiState(
+                        items = _state.value.items + result.items.filter { it.id !in existing },
                         continuation = result.nextPageUrl,
+                        loading = false,
+                    )
+                }
+                .onFailure {
+                    Log.e("ITIFY", "shorts feed crashed", it)
+                    _state.value = _state.value.copy(
+                        loading = false,
+                        error = (it.message ?: it.javaClass.simpleName).take(160),
                     )
                 }
         }
