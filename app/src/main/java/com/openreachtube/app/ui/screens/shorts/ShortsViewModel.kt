@@ -40,11 +40,23 @@ class ShortsViewModel @Inject constructor(
             runCatching { shortsRepository.shortsFeed(continuation) }
                 .onSuccess { result ->
                     val existing = _state.value.items.map { it.id }.toSet()
-                    _state.value = ShortsUiState(
-                        items = _state.value.items + result.items.filter { it.id !in existing },
-                        continuation = result.nextPageUrl,
-                        loading = false,
-                    )
+                    val newItems = result.items.filter { it.id !in existing }
+                    if (newItems.isEmpty() && _state.value.items.isEmpty()) {
+                        // first fetch came back empty (no exception): never leave
+                        // the pager spinning — surface it as an error state
+                        _state.value = ShortsUiState(
+                            items = emptyList(),
+                            continuation = result.nextPageUrl,
+                            loading = false,
+                            error = "No shorts found right now",
+                        )
+                    } else {
+                        _state.value = ShortsUiState(
+                            items = _state.value.items + newItems,
+                            continuation = result.nextPageUrl,
+                            loading = false,
+                        )
+                    }
                 }
                 .onFailure {
                     Log.e("ITIFY", "shorts feed crashed", it)

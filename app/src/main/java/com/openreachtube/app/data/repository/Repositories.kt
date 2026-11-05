@@ -250,7 +250,9 @@ class ShortsRepository @Inject constructor() {
                 val shortsOnly = items.filter { it.isShort }
                 PaginatedList(shortsOnly.ifEmpty { items }, next?.url)
             }.onFailure { logFailure("shorts feed", it) }
-                .getOrDefault(PaginatedList(emptyList(), null))
+                // rethrow so the Shorts screen shows the cause instead of
+                // spinning forever on a silently empty result
+                .getOrThrow()
         }
 }
 
